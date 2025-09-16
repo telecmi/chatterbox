@@ -141,6 +141,7 @@ class ChatterboxTTS:
         self.conds = conds
         # self.watermarker = perth.PerthImplicitWatermarker()
         self.sr = 24000
+        self.conds = self.prepare_conditionals(wav_fpath="/home/user/voice/audio_data/Base-1.wav")
 
     @classmethod
     def from_local(cls, ckpt_dir, device) -> 'ChatterboxTTS':
@@ -501,6 +502,7 @@ class ChatterboxTTS:
     def generate_stream(
         self,
         text: str,
+        # conds,
         audio_prompt_path: Optional[str] = None,
         exaggeration: float = 0.5,
         cfg_weight: float = 0.5,
@@ -531,10 +533,10 @@ class ChatterboxTTS:
         start_time = time.time()
         metrics = StreamingMetrics()
         
-        if audio_prompt_path:
-            self.prepare_conditionals(audio_prompt_path, exaggeration=exaggeration)
-        else:
-            assert self.conds is not None, "Please `prepare_conditionals` first or specify `audio_prompt_path`"
+        # if audio_prompt_path:
+        #     self.prepare_conditionals(audio_prompt_path, exaggeration=exaggeration)
+        # else:
+        #     assert self.conds is not None, "Please `prepare_conditionals` first or specify `audio_prompt_path`"
 
         # Update exaggeration if needed
         if exaggeration != self.conds.t3.emotion_adv[0, 0, 0]:
@@ -546,6 +548,7 @@ class ChatterboxTTS:
             ).to(device=self.device)
 
         # Norm and tokenize text
+        # self.conds = conds
         text = punc_norm(text)
         text_tokens = self.tokenizer.text_to_tokens(text).to(self.device)
         text_tokens = torch.cat([text_tokens, text_tokens], dim=0)  # Need two seqs for CFG
@@ -563,7 +566,7 @@ class ChatterboxTTS:
             for token_chunk in self.inference_stream(
                 t3_cond=self.conds.t3,
                 text_tokens=text_tokens,
-                max_new_tokens=800,
+                max_new_tokens=512,
                 temperature=temperature,
                 cfg_weight=cfg_weight,
                 chunk_size=chunk_size,
@@ -602,7 +605,8 @@ class ChatterboxTTS:
     async def create_stream(
         self,
         text: str,
-        voice: str,  # audio_prompt_path or voice name,
+        # voice: str,  # audio_prompt_path or voice name,
+        # conds
     ) -> AsyncGenerator[Tuple[np.ndarray, int], None]:
         """
         TRUE streaming implementation using generate_stream.
@@ -612,7 +616,7 @@ class ChatterboxTTS:
         import threading
         
         loop = asyncio.get_event_loop()
-        queue: asyncio.Queue[Optional[Tuple[np.ndarray, int]]] = asyncio.Queue()
+        queue: asyncio.Queue[Optional[Tuple[np.ndarray, int]]] = asyncio.Queue(maxsize=3)
         
         def _stream_producer():
             """Run generate_stream in a thread and queue chunks as they arrive"""
@@ -620,13 +624,14 @@ class ChatterboxTTS:
                 # This actually streams chunks progressively
                 for audio_tensor, metrics in self.generate_stream(
                     text=text,
-                    audio_prompt_path=voice if isinstance(voice, str) else None,
-                    exaggeration=0.3,
-                    cfg_weight=0.8,
-                    temperature=0.5,
-                    chunk_size=50,  # Token chunks for streaming
-                    context_window=20,
-                    fade_duration=0.02,
+                    # audio_prompt_path=voice if isinstance(voice, str) else None,
+                    # conds = conds,
+                    exaggeration=0.5,
+                    cfg_weight=0.5,
+                    temperature=0.8,
+                    chunk_size=40,  # Token chunks for streaming
+                    context_window=40,
+                    fade_duration=0.03,
                     print_metrics=False,
                 ):
                     # Convert tensor to numpy
@@ -637,7 +642,7 @@ class ChatterboxTTS:
                         queue.put((audio_np, self.sr)),
                         loop
                     )
-                    future.result()  # Wait for queue operation
+                    # future.result()  # Wait for queue operation
                     
             except Exception as e:
                 logger.error(f"Error in streaming: {e}")
