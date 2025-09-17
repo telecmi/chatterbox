@@ -141,7 +141,9 @@ class ChatterboxTTS:
         self.conds = conds
         # self.watermarker = perth.PerthImplicitWatermarker()
         self.sr = 24000
-        self.conds = self.prepare_conditionals(wav_fpath="/home/user/voice/audio_data/Base-1.wav")
+        
+        # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        # self.conds = self.prepare_conditionals(wav_fpath=os.path.join(BASE_DIR, "reference_audio", "Base-1.wav"))
 
     @classmethod
     def from_local(cls, ckpt_dir, device) -> 'ChatterboxTTS':
